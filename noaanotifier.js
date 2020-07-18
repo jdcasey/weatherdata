@@ -11,7 +11,7 @@ Module.register("noaanotifier", {
     defaults: {
         lat: config.lat,
         lon: config.lon,
-        initialLoadDelay: 2000, // 0 seconds delay
+        initialLoadDelay: 0, // 0 seconds delay
         retryDelay: 2500,
 
         apiBase: "https://api.weather.gov",
