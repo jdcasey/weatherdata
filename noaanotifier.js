@@ -2,7 +2,7 @@
  * Module: NOAACurrent
  * By John Casey https://github.com/jdcasey
  *
- * Based on Module: CurrentWeather, 
+ * Based on Module: CurrentWeather,
  * By Michael Teeuw https://michaelteeuw.nl
  * MIT Licensed.
  */
@@ -55,6 +55,7 @@ Module.register("noaanotifier", {
 
             request.onload = function () {
                 if ( this.status === 200 ){
+                    // Log.log("URL: " + url + "\nhas response body:\n\n" + request.response);
                     resolve(JSON.parse(request.response));
                 }
                 else{
@@ -63,7 +64,8 @@ Module.register("noaanotifier", {
                     Log.error("Error calling " + url + ": " + this.status + " " + request.statusText );
                     reject({
                         status: this.status,
-                        statusText: request.statusText
+                        statusText: request.statusText,
+                        err: "Response status: " + this.status,
                     });
                 }
             };
@@ -82,47 +84,63 @@ Module.register("noaanotifier", {
         });
     },
 
-    loadAndNotify: function(url, notification){
-        var self = this;
-
-        Log.log("Looking up " + notification + " from NOAA URL: " + url);
-        return this.makeRequest("GET", url, self)
-            .then((response)=>{
-                Log.log("Notifying of " + notification);
-                self.sendNotification(notification, response);
-                Log.log(notification + " sent.");
-                return response;
-            })
-            .catch(function(err){
-                Log.error("Failed to load NOAA hourly forecast for Lat/Lon: " + self.config.lat + "," + self.config.lon + ": " + err.status);
-                return null;
-            });
-    },
-
     updateWeatherInfo: function(){
         // this.scheduleUpdate();
 
         // Log.log("Looking up NOAA weather by lat/long");
 
-        var url = this.config.apiBase + '/points/' + this.config.lat + "," + this.config.lon;
-        var self = this;
-        var officeData = {};
+        const startUrl = this.config.apiBase + '/points/' + this.config.lat + "," + this.config.lon;
+        const self = this;
+        let officeData = {};
 
-        Log.log("Retrieving gridpoint information from: '" + url + "'");
-        this.loadAndNotify(url, this.NOTIFICATION_GRIDPOINT_DATA.toString())
-        .then(function(response){
-            officeData = response;
-        })
+        let pendingNotifications = {};
+
+        Log.log("Retrieving gridpoint information from: '" + startUrl + "'");
+        this.makeRequest("GET", startUrl, self)
         .then((response)=>{
-            Log.log("Got NWS office data.");
+          officeData = response;
+          pendingNotifications[this.NOTIFICATION_GRIDPOINT_DATA] = response;
+        })
+        // this.loadAndNotify(url, this.NOTIFICATION_GRIDPOINT_DATA.toString())t
+        // .then(function(response){
+        //     officeData = response;
+        // })
+        .then(()=>{
+          Log.log("Got NWS office data.");
 
-            self.loadAndNotify(officeData.properties.forecastGridData, self.NOTIFICATION_CURRENT_DATA.toString());
-            self.loadAndNotify(officeData.properties.forecastHourly, self.NOTIFICATION_HOURLY_DATA.toString());
-            self.loadAndNotify(officeData.properties.forecast, self.NOTIFICATION_FORECAST_DATA.toString());
+          let urlToKey={};
+          urlToKey[officeData.properties.forecastGridData] = self.NOTIFICATION_CURRENT_DATA;
+          urlToKey[officeData.properties.forecastHourly] = self.NOTIFICATION_HOURLY_DATA;
+          urlToKey[officeData.properties.forecast] = self.NOTIFICATION_FORECAST_DATA;
+
+          let promises = [];
+          Object.keys(urlToKey).forEach((u)=>{
+            promises.push(
+              self.makeRequest("GET", u, self)
+              .then((response)=>{
+                const n = urlToKey[u];
+                Log.log("Loaded " + n);
+                pendingNotifications[n] = response;
+              })
+              .catch((err) =>{
+                self.updateDom(self.config.animationSpeed);
+                Log.error("Failed to load " + n + " information for Lat/Lon: " + self.config.lat + "," + self.config.lon);
+              })
+            );
+          });
+
+          return Promise.all(promises);
+        })
+        .then((values)=>{
+          Log.log("All weather data loaded.");
+          Object.keys(pendingNotifications).forEach((n)=>{
+            Log.log("Sending notification: " + n);
+            self.sendNotification(n, pendingNotifications[n]);
+          })
         })
         .catch(function(err){
             self.updateDom(self.config.animationSpeed);
-            Log.error("Failed to load NOAA information for Lat/Lon: " + self.config.lat + "," + self.config.lon);
+            Log.error("Failed to load weather information for Lat/Lon: " + self.config.lat + "," + self.config.lon + ", ERROR: " + err);
         });
 
         this.scheduleUpdate();
