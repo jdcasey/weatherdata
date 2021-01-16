@@ -11,6 +11,7 @@ Module.register("noaanotifier", {
     defaults: {
         lat: config.lat,
         lon: config.lon,
+        station: null,
         initialLoadDelay: 0, // 0 seconds delay
         retryDelay: 2500,
 
@@ -19,6 +20,7 @@ Module.register("noaanotifier", {
     },
 
     NOTIFICATION_GRIDPOINT_DATA: "NOAAWEATHER_GRIDPOINT_DATA",
+    NOTIFICATION_GRIDPOINT_CURRENT_DATA: "NOAAWEATHER_GRIDPOINT_CURRENT_DATA",
     NOTIFICATION_CURRENT_DATA: "NOAAWEATHER_CURRENT_DATA",
     NOTIFICATION_HOURLY_DATA: "NOAAWEATHER_HOURLY_DATA",
     NOTIFICATION_FORECAST_DATA: "NOAAWEATHER_FORECAST_DATA",
@@ -48,10 +50,11 @@ Module.register("noaanotifier", {
         this.scheduleUpdate(this.config.initialLoadDelay);
     },
 
-    makeRequest: function(method, url, self){
+    makeRequest: function(url, self){
         return new Promise(function(resolve, reject){
             var request = new XMLHttpRequest();
-            request.open(method, url, true);
+            Log.log("Requesting from URL: " + url);
+            request.open("GET", url, true);
 
             request.onload = function () {
                 if ( this.status === 200 ){
@@ -72,7 +75,7 @@ Module.register("noaanotifier", {
 
             request.onerror = function(err){
                 self.scheduleUpdate(self.loaded ? -1 : self.config.retryDelay);
-                Log.error("Error calling " + url + ": " + err )
+                Log.error("Error calling " + url, err );
                 reject({
                     status: this.status,
                     statusText: request.statusText,
@@ -82,6 +85,24 @@ Module.register("noaanotifier", {
 
             request.send();
         });
+    },
+
+    makeCurrentData: function(response){
+      Log.log("Creating current weather data object.");
+      const p = response.properties;
+
+      const feelsLike = p.windChill.value === null ?
+        p.heatIndex.value :
+        p.windChill.value;
+
+       return {
+        temp: p.temperature.value,
+        humidity: p.relativeHumidity.value,
+        feelsLike: feelsLike,
+        windSpeed: p.windSpeed.value,
+        windDeg: p.windDirection.value,
+        weatherIcon: p.icon,
+      };
     },
 
     updateWeatherInfo: function(){
@@ -96,35 +117,64 @@ Module.register("noaanotifier", {
         let pendingNotifications = {};
 
         Log.log("Retrieving gridpoint information from: '" + startUrl + "'");
-        this.makeRequest("GET", startUrl, self)
+        this.makeRequest(startUrl, self)
         .then((response)=>{
           officeData = response;
           pendingNotifications[this.NOTIFICATION_GRIDPOINT_DATA] = response;
         })
-        // this.loadAndNotify(url, this.NOTIFICATION_GRIDPOINT_DATA.toString())t
-        // .then(function(response){
-        //     officeData = response;
-        // })
+        .then(()=>{
+          if ( self.config.station === null || self.config.station === 'undefined' ){
+            Log.log("Loading observation stations recorded at gridpoint.");
+            return self.makeRequest(officeData.properties.observationStations, self)
+            .then((obsResp)=>{
+              Log.log("Loading observation data from stations recorded at gridpoint.");
+              return self.makeRequest(obsResp.observationStations[0]  + "/observations/latest", self)
+              .then((resp)=>{
+                pendingNotifications[self.NOTIFICATION_CURRENT_DATA] = self.makeCurrentData(resp);
+              })
+              .catch((err) =>{
+                self.updateDom(self.config.animationSpeed);
+                Log.error("Failed to load current information for: " + obsResp.observationStations[0], err);
+              });
+            })
+            .catch((err) =>{
+              self.updateDom(self.config.animationSpeed);
+              Log.error("Failed to load observation stations for Lat/Lon: " + self.config.lat + "," + self.config.lon, err);
+            });
+          }
+          else{
+            const currentUrl = self.config.apiBase + '/stations/' + self.config.station + "/observations/latest";
+            Log.log("Loading observation data from configured station.");
+            return self.makeRequest(currentUrl, self)
+            .then((resp)=>{
+              pendingNotifications[self.NOTIFICATION_CURRENT_DATA] = self.makeCurrentData(resp);
+            })
+            .catch((err) =>{
+              self.updateDom(self.config.animationSpeed);
+              Log.error("Failed to load current information for Lat/Lon: " + self.config.lat + "," + self.config.lon, err);
+            });
+          }
+        })
         .then(()=>{
           Log.log("Got NWS office data.");
 
           let urlToKey={};
-          urlToKey[officeData.properties.forecastGridData] = self.NOTIFICATION_CURRENT_DATA;
+          urlToKey[officeData.properties.forecastGridData] = self.NOTIFICATION_GRIDPOINT_CURRENT_DATA,
           urlToKey[officeData.properties.forecastHourly] = self.NOTIFICATION_HOURLY_DATA;
           urlToKey[officeData.properties.forecast] = self.NOTIFICATION_FORECAST_DATA;
 
           let promises = [];
           Object.keys(urlToKey).forEach((u)=>{
             promises.push(
-              self.makeRequest("GET", u, self)
+              self.makeRequest(u, self)
               .then((response)=>{
                 const n = urlToKey[u];
-                Log.log("Loaded " + n);
+                Log.log("Loaded " + n + " from: " + u);
                 pendingNotifications[n] = response;
               })
               .catch((err) =>{
                 self.updateDom(self.config.animationSpeed);
-                Log.error("Failed to load " + n + " information for Lat/Lon: " + self.config.lat + "," + self.config.lon);
+                Log.error("Failed to load " + n + " information for Lat/Lon: " + self.config.lat + "," + self.config.lon, err);
               })
             );
           });
@@ -140,7 +190,7 @@ Module.register("noaanotifier", {
         })
         .catch(function(err){
             self.updateDom(self.config.animationSpeed);
-            Log.error("Failed to load weather information for Lat/Lon: " + self.config.lat + "," + self.config.lon + ", ERROR: " + err);
+            Log.error("Failed to load weather information for Lat/Lon: " + self.config.lat + "," + self.config.lon, err);
         });
 
         this.scheduleUpdate();
