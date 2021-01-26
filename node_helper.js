@@ -225,7 +225,7 @@ module.exports = NodeHelper.create({
     }
 
     console.log("weather notifier node_helper: notifying socket of refreshed weather.");
-    console.log(JSON.stringify(data.hourly, null, 2));
+    // console.log(JSON.stringify(data.hourly, null, 2));
     self.sendSocketNotification("WEATHER_REFRESHED", data);
   },
 });
