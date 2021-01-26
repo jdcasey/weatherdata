@@ -1,9 +1,9 @@
 /* Magic Mirror
- * Module: NOAANotifier
+ * Module: weatherdata
  * By John Casey https://github.com/jdcasey
  * MIT Licensed.
  */
-Module.register("noaanotifier", {
+Module.register("weatherdata", {
     // Default module config.
     defaults: {
         // lat: <LATITUDE>,

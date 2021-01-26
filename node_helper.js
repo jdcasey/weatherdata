@@ -225,7 +225,10 @@ module.exports = NodeHelper.create({
     }
 
     console.log("weather notifier node_helper: notifying socket of refreshed weather.");
-    // console.log(JSON.stringify(data.hourly, null, 2));
+    if ( data.minutely !== undefined ){
+      console.log(`Minutely data has ${data.minutely.length} elements.`);
+    }
+
     self.sendSocketNotification("WEATHER_REFRESHED", data);
   },
 });

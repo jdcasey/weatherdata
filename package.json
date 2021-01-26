@@ -1,14 +1,14 @@
 {
-  "name": "noaanotifier",
+  "name": "weatherdata",
   "version": "0.1.0",
   "description": "Weather data loader for MagicMirror^2 that sends updates to multiple view modules using the notification infrastructure",
-  "main": "noaanotifier.js",
+  "main": "weatherdata.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jdcasey/noaanotifier.git"
+    "url": "git+https://github.com/jdcasey/weatherdata.git"
   },
   "keywords": [
     "magicmirror"
@@ -16,9 +16,9 @@
   "author": "John Casey <jdcasey@commonjava.org> (http://johnofalltrades.name/)",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/jdcasey/noaanotifier/issues"
+    "url": "https://github.com/jdcasey/weatherdata/issues"
   },
-  "homepage": "https://github.com/jdcasey/noaanotifier#readme",
+  "homepage": "https://github.com/jdcasey/weatherdata#readme",
   "dependencies": {
     "axios": "^0.21.1"
   }
